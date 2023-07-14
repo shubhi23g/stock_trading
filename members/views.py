@@ -10,7 +10,6 @@ from decimal import Decimal
 
 @api_view(['POST'])
 def upload_csv(request):
-    print(request.FILES.get('csv_file'))
     if request.method == 'POST' and request.FILES.get('csv_file'):
         csv_file = request.FILES['csv_file']
         # Process the CSV file
@@ -25,6 +24,7 @@ def upload_csv(request):
             price = row[3]
             if (not StockTrading.objects.filter(company=company_name,date=date,closing_prize=price)) :
                 StockTrading.objects.create(company=company_name,date=date,closing_prize=price)
+            StockTrading.objects.values().order_by('date')
         return Response({"status": "success"})
     return Response({"status": "failed"})    
 
@@ -36,9 +36,7 @@ def stock_result(request):
     end_date = parse_date(request.data.get('end_date'))
     stock_prices = StockTrading.objects.filter(company__icontains=company_name, date__range=(start_date, end_date)).values().order_by('date')
     count = stock_prices.count()
-    # print("stock_prices :",stock_prices,"count:",count)
     data1 = StockTradingSerializer(stock_prices, many=True, context={'request': request}).data
-    # print("aaaaaaaaaaaaaaaaaaaaaaaaaaa",data1,"sssssssssssssssssssssss",stock_prices[0].get('date') )
     buy_date,selling_date,buying_price,selling_price, max_profit,mean_stock_price,standard_deviation=result(stock_prices,count)
     return Response ({"message":data1,
                       "buy_date":buy_date,
@@ -53,7 +51,7 @@ def stock_result(request):
 def result(stock_prices,count,buying_price=None,buy_date = None,selling_date = None):
     max_profit = 0
     min_loss = float('inf')
-    # profit
+
     if(buying_price==None):
         for i in range(count):
             for j in range(i + 1, count):
@@ -71,31 +69,23 @@ def result(stock_prices,count,buying_price=None,buy_date = None,selling_date = N
         buying_price = Decimal(buying_price) 
         index = 0
         for i, stock_price in enumerate(stock_prices):
-            # print(i)
+
             if stock_price['closing_prize'] == buying_price:
-                # print("gggggggggggggggggggg",stock_price['closing_prize'])
                 index = i
                 break
-       
-
-       
-        for j in range(index + 1, count):
+        # profit
+        for j in range(index+1, count):
                 selling_price = stock_prices[j].get('closing_prize')
-                # print("selling_price",selling_price)
                 shares = 200
-
                 profit = (selling_price - buying_price) * shares
-                # print("profit",profit)
                 if profit >=0:
                     if profit > max_profit:
                         max_profit = profit
-                        buy_date = stock_prices[index].get('date')
                         selling_date = stock_prices[j].get('date')       
                 else:
                     if profit < min_loss:
                         min_loss = profit
-                        buy_date = stock_prices[index].date
-                        selling_date = stock_prices[j].date
+                        selling_date = stock_prices[j].get('date')
                         
     buying_price = stock_prices.filter(date=buy_date).values()
     selling_price = stock_prices.filter(date=selling_date).values()
@@ -123,15 +113,19 @@ def post_user(request):
 def get_user_profile(request):
     company_name = request.data.get('company_name')
     price = request.data.get('price')
-    buy_date = parse_date(request.data.get('buy_date'))
+    buy_date = parse_date(request.data.get('buy_date')).date()
     end_date = datetime.now().date()
-    # print("end_date",end_date,"jjjjjjjjjjjjjj","buy_date",buy_date)
-    stock_prices = StockTrading.objects.filter(company__icontains=company_name, date__range=(buy_date, end_date)).values().order_by('date')
+    if(not StockTrading.objects.filter(company__icontains=company_name, date=buy_date, closing_prize=price)):
+            queryset=StockTrading.objects.filter(company__icontains=company_name, date=buy_date).values()
+            id = queryset[0].get('id')-1
+            price=StockTrading.objects.filter(id=id).values()[0].get('closing_prize')
+            date=StockTrading.objects.filter(id=id).values()[0].get('date')
+            stock_prices = StockTrading.objects.filter(company__icontains=company_name, date__range=(date, end_date)).values().order_by('date')
+    else:
+        stock_prices = StockTrading.objects.filter(company__icontains=company_name, date__range=(buy_date, end_date)).values().order_by('date')   
     count = stock_prices.count()
-    # print("stock_prices :",stock_prices,"count:",count)
     data1 = StockTradingSerializer(stock_prices, many=True, context={'request': request}).data
-
-    buy_date,selling_date,buying_price,selling_price, max_profit,mean_stock_price,standard_deviation = result(stock_prices,count,price)
+    buy_date,selling_date,buying_price,selling_price, max_profit,mean_stock_price,standard_deviation = result(stock_prices,count,price,buy_date)
     
     return Response ({"message":data1,
                       "buy_date":buy_date,
