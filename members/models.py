@@ -1,6 +1,4 @@
 from django.db import models
-class CompanyList(models.Model) :
-    name = models.CharField(max_length=100)
 
 class StockTrading(models.Model):
     company=models.CharField(max_length=100)
